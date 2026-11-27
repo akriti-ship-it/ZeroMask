@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ZeroMask — Client-Side PII Data Sanitization</title>
+  <meta
+    name="description"
+    content="ZeroMask: 100% client-side PII detection, checksum validation, and sanitization."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="header-left">
+        <a href="#workspace" class="brand" id="brandLink" aria-label="ZeroMask Home">
+          <span class="brand-logo" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+              <path
+                d="M14 2.5L24 8.2V19.8L14 25.5L4 19.8V8.2L14 2.5Z"
+                stroke="#38BDF8"
+                stroke-width="1.6"
+                fill="rgba(56, 189, 248, 0.1)"
+              />
+              <path d="M14 2.5V14M14 14L24 8.2M14 14L4 8.2" stroke="currentColor" stroke-width="1.4" opacity="0.85" />
+              <circle cx="14" cy="14" r="2.1" fill="#38BDF8" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">ZEROMASK</span>
+            <span class="brand-tagline">CLIENT-SIDE // ZERO-EGRESS</span>
+          </span>
+        </a>
+
+        <nav class="primary-nav" aria-label="Primary Navigation">
+          <button type="button" class="nav-link is-active" data-view="workspace">Workspace</button>
+          <button type="button" class="nav-link" data-view="rules">Detection Rules</button>
+          <button type="button" class="nav-link" data-view="how-it-works">How It Works</button>
+        </nav>
+      </div>
+
+      <div class="header-right">
+        <div class="privacy-badge" title="All scanning and redaction executes locally in browser memory">
+          <span class="status-dot" aria-hidden="true"></span>
+          <svg class="lock-icon" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5" />
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+          <span class="privacy-text">Runs entirely in your browser. No data leaves your device.</span>
+        </div>
+
+        <button
+          type="button"
+          id="themeToggleBtn"
+          class="icon-btn"
+          aria-label="Toggle dark or light theme"
+          title="Switch theme"
+        >
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.75" />
+            <path
+              d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+            />
+          </svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Primary Workspace View -->
+    <main id="view-workspace" class="main-container view-section is-active">
+      <!-- Error / Status Banner -->
+      <div id="errorBanner" class="error-banner" role="alert" hidden>
+        <div class="error-banner-body">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.6" />
+            <path d="M10 6v4.5M10 13.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          <span id="errorBannerText">Unsupported file format. Please upload a TXT or CSV file.</span>
+        </div>
+        <button type="button" id="dismissErrorBtn" class="ghost-btn-sm" aria-label="Dismiss message">Dismiss</button>
+      </div>
+
+      <!-- Dashboard Overview Cards & Distribution Bar -->
+      <section class="overview-section" aria-label="Detection Statistics">
+        <div class="stats-grid">
+          <article class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Total Entities Detected</span>
+              <span class="stat-badge stat-badge-teal">Live</span>
+            </div>
+            <div class="stat-value" id="statTotalDetected">0</div>
+            <div class="stat-sub">Unique + repeated spans flagged</div>
+          </article>
+
+          <article class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Sensitive Data Types</span>
+              <span class="stat-badge">Categories</span>
+            </div>
+            <div class="stat-value"><span id="statTypesFound">0</span><span class="stat-denom"> / 6</span></div>
+            <div class="stat-sub">Active categories matched</div>
+          </article>
+
+          <article class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Rejected by Validation</span>
+              <span class="stat-badge stat-badge-amber">Filtered</span>
+            </div>
+            <div class="stat-value" id="statRejected">0</div>
+            <div class="stat-sub">Failed Luhn, Verhoeff, or range checks</div>
+          </article>
+
+          <article class="stat-card">
+            <div class="stat-header">
+              <span class="stat-label">Entities Sanitized</span>
+              <span class="stat-badge stat-badge-green" id="statModeBadge">Full Mask</span>
+            </div>
+            <div class="stat-value" id="statSanitized">0</div>
+            <div class="stat-sub">Replaced safely with zero overlap</div>
+          </article>
+        </div>
+
+        <!-- Dynamic Horizontal Distribution Bar -->
+        <div class="distribution-card">
+          <div class="distribution-top">
+            <span class="distribution-title">Entity Distribution</span>
+            <div class="distribution-legend" id="distributionLegend">
+              <span class="legend-item" data-type="EMAIL"><i class="dot dot-email"></i>Email <strong id="legendCountEmail">0</strong></span>
+              <span class="legend-item" data-type="PHONE"><i class="dot dot-phone"></i>Phone <strong id="legendCountPhone">0</strong></span>
+              <span class="legend-item" data-type="IP"><i class="dot dot-ip"></i>IP Address <strong id="legendCountIP">0</strong></span>
+              <span class="legend-item" data-type="PAN"><i class="dot dot-pan"></i>PAN <strong id="legendCountPAN">0</strong></span>
+              <span class="legend-item" data-type="AADHAAR"><i class="dot dot-aadhaar"></i>Aadhaar <strong id="legendCountAadhaar">0</strong></span>
+              <span class="legend-item" data-type="CREDIT_CARD"><i class="dot dot-card"></i>Credit Card <strong id="legendCountCard">0</strong></span>
+            </div>
+          </div>
+          <div class="distribution-bar" id="distributionBar" role="img" aria-label="Entity category distribution">
+            <div class="dist-empty">No sensitive entities detected yet</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Mobile Pane Switcher -->
+      <div class="mobile-pane-tabs" role="tablist" aria-label="Mobile Editor Views">
+        <button type="button" class="mobile-tab is-active" data-pane="original" role="tab" aria-selected="true">
+          Original Data
+        </button>
+        <button type="button" class="mobile-tab" data-pane="sanitized" role="tab" aria-selected="false">
+          Sanitized Output
+        </button>
+      </div>
+
+      <!-- Three-Column Main Workspace -->
+      <section class="workspace-grid" id="workspaceGrid" aria-label="Sanitization Workspace">
+        <!-- Left Sidebar: Configuration -->
+        <aside class="config-sidebar" id="configSidebar" aria-label="Detection and Redaction Configuration">
+          <div class="sidebar-header">
+            <h2 class="panel-title">Configuration</h2>
+            <button
+              type="button"
+              id="collapseSidebarBtn"
+              class="icon-btn-sm"
+              aria-expanded="true"
+              aria-controls="sidebarBody"
+              title="Collapse configuration sidebar"
+            >
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M12.5 5L7.5 10l5 5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+
+          <div class="sidebar-body" id="sidebarBody">
+            <!-- Entity Checkboxes -->
+            <div class="config-group">
+              <div class="config-group-header">
+                <span class="config-label">Entity Detectors</span>
+                <button type="button" id="toggleAllDetectorsBtn" class="text-btn">Toggle All</button>
+              </div>
+              <div class="detector-list" id="detectorCheckboxes">
+                <label class="detector-item" data-type="EMAIL">
+                  <span class="detector-left">
+                    <input type="checkbox" name="detector" value="EMAIL" checked />
+                    <span class="entity-swatch swatch-email"></span>
+                    <svg class="entity-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M3.5 6l6.5 4.8L16.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <span class="detector-name">Email</span>
+                  </span>
+                  <span class="detector-count" id="countEMAIL">0</span>
+                </label>
+
+                <label class="detector-item" data-type="PHONE">
+                  <span class="detector-left">
+                    <input type="checkbox" name="detector" value="PHONE" checked />
+                    <span class="entity-swatch swatch-phone"></span>
+                    <svg class="entity-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path d="M4.5 3.5h3l1.3 3.4-1.8 1.5a11 11 0 0 0 4.6 4.6l1.5-1.8 3.4 1.3v3a1.5 1.5 0 0 1-1.6 1.5A12.5 12.5 0 0 1 3 5.1 1.5 1.5 0 0 1 4.5 3.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                    </svg>
+                    <span class="detector-name">Phone</span>
+                  </span>
+                  <span class="detector-count" id="countPHONE">0</span>
+                </label>
+
+                <label class="detector-item" data-type="IP">
+                  <span class="detector-left">
+                    <input type="checkbox" name="detector" value="IP" checked />
+                    <span class="entity-swatch swatch-ip"></span>
+                    <svg class="entity-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M3.2 10h13.6M10 3a10 10 0 0 1 0 14M10 3a10 10 0 0 0 0 14" stroke="currentColor" stroke-width="1.35" />
+                    </svg>
+                    <span class="detector-name">IP Address</span>
+                  </span>
+                  <span class="detector-count" id="countIP">0</span>
+                </label>
+
+                <label class="detector-item" data-type="PAN">
+                  <span class="detector-left">
+                    <input type="checkbox" name="detector" value="PAN" checked />
+                    <span class="entity-swatch swatch-pan"></span>
+                    <svg class="entity-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <rect x="2.5" y="4.5" width="15" height="11" rx="1.8" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M6 8.5h8M6 11.5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <span class="detector-name">PAN</span>
+                  </span>
+                  <span class="detector-count" id="countPAN">0</span>
+                </label>
+
+                <label class="detector-item" data-type="AADHAAR">
+                  <span class="detector-left">
+                    <input type="checkbox" name="detector" value="AADHAAR" checked />
+                    <span class="entity-swatch swatch-aadhaar"></span>
+                    <svg class="entity-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <path d="M10 3a7 7 0 0 0-7 7v2M10 3a7 7 0 0 1 7 7v2M6.5 10a3.5 3.5 0 0 1 7 0v3.5M10 10v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <span class="detector-name">Aadhaar</span>
+                  </span>
+                  <span class="detector-count" id="countAADHAAR">0</span>
+                </label>
+
+                <label class="detector-item" data-type="CREDIT_CARD">
+                  <span class="detector-left">
+                    <input type="checkbox" name="detector" value="CREDIT_CARD" checked />
+                    <span class="entity-swatch swatch-card"></span>
+                    <svg class="entity-icon" width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                      <rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M2.5 8.5h15M6 12.5h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                    <span class="detector-name">Credit Card</span>
+                  </span>
+                  <span class="detector-count" id="countCREDIT_CARD">0</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Redaction Mode Segmented Control -->
+            <div class="config-group">
+              <span class="config-label">Redaction Mode</span>
+              <div class="segmented-control" role="radiogroup" aria-label="Redaction mode">
+                <button type="button" class="seg-btn is-active" data-mode="full" role="radio" aria-checked="true">
+                  Full
+                </button>
+                <button type="button" class="seg-btn" data-mode="partial" role="radio" aria-checked="false">
+                  Partial
+                </button>
+                <button type="button" class="seg-btn" data-mode="pseudonym" role="radio" aria-checked="false">
+                  Pseudonym
+                </button>
+              </div>
+
+              <div class="mode-info-box" id="modeInfoBox">
+                <p class="mode-desc" id="modeDescription">
+                  Replaces every detected entity with a fixed token so no character structure leaks.
+                </p>
+                <div class="mode-examples" id="modeExamples">
+                  <code>[REDACTED]</code> or <code>[REDACTED:EMAIL]</code>
+                </div>
+              </div>
+            </div>
+
+            <!-- Typed Token Toggle -->
+            <div class="config-group" id="typedTokenGroup">
+              <label class="switch-row" for="typedTokenToggle">
+                <span class="switch-copy">
+                  <span class="switch-title">Typed Redaction Tokens</span>
+                  <span class="switch-sub">Use <code>[REDACTED:TYPE]</code> instead of <code>[REDACTED]</code></span>
+                </span>
+                <input type="checkbox" id="typedTokenToggle" class="toggle-input" checked />
+                <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+
+            <!-- Reset Configuration -->
+            <div class="config-footer">
+              <button type="button" id="resetConfigBtn" class="secondary-btn full-width">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M4 10a6 6 0 1 0 1.8-4.3L4 7.5M4 3.5v4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                Reset Configuration
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Center Panel: Original Data -->
+        <section class="editor-panel is-mobile-active" id="originalPanel" aria-label="Original Data Input">
+          <div class="panel-header">
+            <div class="panel-title-wrap">
+              <h2 class="panel-title">Original Data</h2>
+              <span class="meta-pill" id="fileMetaPill">Untitled input · 0 B · 0 chars</span>
+            </div>
+            <div class="panel-actions">
+              <input
+                type="file"
+                id="fileInput"
+                accept=".txt,.csv,text/plain,text/csv"
+                hidden
+              />
+              <button type="button" id="uploadFileBtn" class="secondary-btn-sm">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M10 13V4m0 0L6.5 7.5M10 4l3.5 3.5M4 14.5v1A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                Upload File
+              </button>
+              <button type="button" id="loadSampleBtn" class="accent-btn-sm">
+                Load Sample Noisy Text
+              </button>
+              <button type="button" id="clearInputBtn" class="ghost-btn-sm" disabled title="No text to clear">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div class="editor-stage drop-target" id="originalDropZone">
+            <!-- Drag overlay -->
+            <div class="drag-overlay" id="dragOverlay" hidden>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 16V4m0 0l-4 4m4-4l4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <strong>Drop .TXT or .CSV file to sanitize locally</strong>
+              <span>Processed in memory via FileReader</span>
+            </div>
+
+            <!-- Empty state overlay when input is empty -->
+            <div class="empty-state" id="originalEmptyState">
+              <svg width="56" height="56" viewBox="0 0 56 56" fill="none" aria-hidden="true">
+                <rect x="8" y="8" width="40" height="40" rx="10" fill="rgba(45, 212, 191, 0.08)" stroke="rgba(45, 212, 191, 0.35)" stroke-width="1.4" />
+                <path d="M28 17l-9 3.8v6.1c0 5.6 3.8 10.7 9 12.1 5.2-1.4 9-6.5 9-12.1v-6.1L28 17z" stroke="#2DD4BF" stroke-width="1.6" stroke-linejoin="round" />
+                <path d="M24.5 27.5l2.3 2.3 4.7-4.8" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <h3>Your secure workspace is ready.</h3>
+              <p>Paste text or upload a <code>.txt</code> / <code>.csv</code> file to detect sensitive information.</p>
+              <div class="empty-actions">
+                <button type="button" class="accent-btn-sm" id="emptyLoadSampleBtn">Load Sample Noisy Text</button>
+                <button type="button" class="secondary-btn-sm" id="emptyUploadBtn">Choose File</button>
+              </div>
+            </div>
+
+            <div class="code-editor-shell" id="originalEditorShell">
+              <div class="line-gutter" id="originalGutter" aria-hidden="true">1</div>
+              <div class="editor-layers">
+                <pre class="highlight-backdrop" id="originalBackdrop" aria-hidden="true"></pre>
+                <textarea
+                  id="rawInput"
+                  class="code-textarea"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  aria-label="Original text input"
+                  placeholder=""
+                ></textarea>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right Panel: Sanitized Output -->
+        <section class="editor-panel" id="sanitizedPanel" aria-label="Sanitized Output">
+          <div class="panel-header">
+            <div class="panel-title-wrap">
+              <h2 class="panel-title">Sanitized Output</h2>
+              <span class="status-pill" id="processingStatusPill">
+                <span class="pulse-dot"></span>
+                <span id="processingStatusText">Ready</span>
+              </span>
+            </div>
+            <div class="panel-actions">
+              <button type="button" id="copyOutputBtn" class="secondary-btn-sm" disabled title="Enter text to copy sanitized output">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="7" y="7" width="9.5" height="9.5" rx="1.5" stroke="currentColor" stroke-width="1.5" />
+                  <path d="M13 7V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v6.5A1.5 1.5 0 0 0 5 13h2" stroke="currentColor" stroke-width="1.5" />
+                </svg>
+                Copy
+              </button>
+              <button type="button" id="downloadSanitizedBtn" class="primary-btn-sm" disabled title="Enter text to download sanitized file">
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M10 3.5v9m0 0l3.5-3.5M10 12.5L6.5 9M4 14.5v1A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5v-1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                Download Sanitized File
+              </button>
+            </div>
+          </div>
+
+          <div class="editor-stage sanitized-stage">
+            <div class="empty-state" id="sanitizedEmptyState">
+              <svg width="52" height="52" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+                <rect x="10" y="8" width="32" height="36" rx="6" fill="rgba(148, 163, 184, 0.08)" stroke="rgba(148, 163, 184, 0.28)" stroke-width="1.4" />
+                <path d="M18 20h16M18 26h12M18 32h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.55" />
+              </svg>
+              <h3>Sanitized preview appears here</h3>
+              <p>Redacted tokens update live as you type, toggle detectors, or switch masking modes.</p>
+            </div>
+
+            <div class="clean-banner" id="noPiiBanner" hidden>
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5" />
+                <path d="M6.8 10.2l2.2 2.2 4.3-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>No sensitive information detected with active rules.</span>
+            </div>
+
+            <div class="code-editor-shell" id="sanitizedEditorShell">
+              <div class="line-gutter" id="sanitizedGutter" aria-hidden="true">1</div>
+              <div class="sanitized-scroll" id="sanitizedScroll" tabindex="0" aria-label="Sanitized output preview">
+                <pre class="sanitized-pre" id="sanitizedOutput"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <!-- Collapsible Audit & Insights Section -->
+      <section class="audit-section" id="auditSection" aria-label="Audit and Insights">
+        <div class="audit-header">
+          <div class="audit-header-left">
+            <button
+              type="button"
+              id="toggleAuditBtn"
+              class="collapse-heading-btn"
+              aria-expanded="true"
+              aria-controls="auditBody"
+            >
+              <svg class="chevron-icon" width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+              <span>Audit &amp; Insights</span>
+            </button>
+
+            <div class="audit-tabs" role="tablist" aria-label="Audit tabs">
+              <button type="button" class="audit-tab is-active" data-tab="summary" role="tab" aria-selected="true">
+                Detection Summary
+              </button>
+              <button type="button" class="audit-tab" data-tab="details" role="tab" aria-selected="false">
+                Entity Details <span class="tab-count" id="tabCountDetails">0</span>
+              </button>
+              <button type="button" class="audit-tab" data-tab="mapping" role="tab" aria-selected="false">
+                Pseudonym Mapping <span class="tab-count" id="tabCountMapping">0</span>
+              </button>
+              <button type="button" class="audit-tab" data-tab="validation" role="tab" aria-selected="false">
+                Validation Report <span class="tab-count" id="tabCountValidation">0</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="audit-actions">
+            <button type="button" id="downloadAuditBtn" class="secondary-btn-sm" disabled title="Scan text to export a zero-PII audit report">
+              Download audit report (JSON)
+            </button>
+          </div>
+        </div>
+
+        <div class="audit-body" id="auditBody">
+          <!-- Tab 1: Detection Summary -->
+          <div class="audit-pane is-active" id="tab-summary" role="tabpanel">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Entity Category</th>
+                    <th>Detected</th>
+                    <th>Share</th>
+                    <th>Validation Strategy</th>
+                    <th>Partial Mask Sample</th>
+                  </tr>
+                </thead>
+                <tbody id="summaryTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 2: Entity Details -->
+          <div class="audit-pane" id="tab-details" role="tabpanel" hidden>
+            <div class="pane-toolbar">
+              <span class="privacy-note">
+                Sensitive values are masked by default in audit logs.
+              </span>
+              <button type="button" id="revealValuesBtn" class="secondary-btn-sm" aria-pressed="false">
+                Reveal Original Values
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Type</th>
+                    <th>Span</th>
+                    <th>Validation Status</th>
+                    <th>Original Value</th>
+                    <th>Replacement</th>
+                  </tr>
+                </thead>
+                <tbody id="detailsTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 3: Pseudonym Mapping -->
+          <div class="audit-pane" id="tab-mapping" role="tabpanel" hidden>
+            <div class="pane-toolbar">
+              <span class="privacy-note">
+                <strong>Memory-only:</strong> This lookup table stays in RAM and is never exported unless you explicitly click Download mapping (JSON).
+              </span>
+              <div class="toolbar-btns">
+                <button type="button" id="revealMappingBtn" class="secondary-btn-sm" aria-pressed="false">
+                  Reveal Originals
+                </button>
+                <button
+                  type="button"
+                  id="downloadMappingBtn"
+                  class="secondary-btn-sm"
+                  disabled
+                  title="Switch to Pseudonym mode with detected entities to export mapping"
+                >
+                  Download mapping (JSON)
+                </button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Pseudonym ID</th>
+                    <th>Type</th>
+                    <th>Normalized Key</th>
+                    <th>Occurrences</th>
+                    <th>Original Value</th>
+                  </tr>
+                </thead>
+                <tbody id="mappingTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab 4: Validation Report -->
+          <div class="audit-pane" id="tab-validation" role="tabpanel" hidden>
+            <div class="pane-toolbar">
+              <span class="privacy-note">
+                Candidates rejected by Luhn, Verhoeff, IPv4 octet range, PAN entity-type, or version-context filters.
+              </span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Candidate Type</th>
+                    <th>Offset</th>
+                    <th>Rejection Reason</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="validationTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Detection Rules Reference View -->
+    <section id="view-rules" class="main-container view-section info-view" hidden>
+      <div class="info-header">
+        <h1>Detection Rules &amp; Overlap Priority</h1>
+        <p>Deterministic client-side scanners ordered from highest to lowest overlap precedence:
+          <code>CREDIT_CARD &gt; AADHAAR &gt; PAN &gt; EMAIL &gt; IP &gt; PHONE</code>
+        </p>
+      </div>
+      <div class="rules-grid">
+        <article class="info-card">
+          <div class="info-card-head"><span class="entity-pill pill-card">CREDIT_CARD</span><span>Priority 1 (Highest)</span></div>
+          <p>Matches 13–19 digits with optional spaces or hyphens. Must pass <strong>Luhn (mod-10)</strong> and match Visa, Mastercard, Amex, Discover, or RuPay prefixes.</p>
+          <div class="info-example">Partial: <code>XXXX-XXXX-XXXX-1234</code></div>
+        </article>
+        <article class="info-card">
+          <div class="info-card-head"><span class="entity-pill pill-aadhaar">AADHAAR</span><span>Priority 2</span></div>
+          <p>Matches 12 digits starting 2–9 (plain or 4-4-4 space/hyphen grouped). Validated with the <strong>Verhoeff D5 checksum</strong> to filter random 12-digit IDs.</p>
+          <div class="info-example">Partial: <code>XXXX-XXXX-1234</code></div>
+        </article>
+        <article class="info-card">
+          <div class="info-card-head"><span class="entity-pill pill-pan">PAN</span><span>Priority 3</span></div>
+          <p>Matches <code>^[A-Z]{5}[0-9]{4}[A-Z]$</code> with strict word boundaries and validates the 4th-character entity type (<code>P,C,H,F,A,T,B,L,J,G</code>).</p>
+          <div class="info-example">Partial (first 2 + last 1): <code>ABXXXXXXXF</code></div>
+        </article>
+        <article class="info-card">
+          <div class="info-card-head"><span class="entity-pill pill-email">EMAIL</span><span>Priority 4</span></div>
+          <p>RFC-style local@domain.tld matcher supporting dots, underscores, plus-tags, and subdomains. Normalized lowercase in pseudonym mode.</p>
+          <div class="info-example">Partial: <code>j***@domain.com</code></div>
+        </article>
+        <article class="info-card">
+          <div class="info-card-head"><span class="entity-pill pill-ip">IP</span><span>Priority 5</span></div>
+          <p>IPv4 with strict <code>0–255</code> octet checks and version-context exclusion (e.g. <code>v1.2.3.4</code>), plus full and compressed <code>::</code> IPv6 addresses.</p>
+          <div class="info-example">Partial: <code>192.168.X.X</code></div>
+        </article>
+        <article class="info-card">
+          <div class="info-card-head"><span class="entity-pill pill-phone">PHONE</span><span>Priority 6</span></div>
+          <p>Indian numbers (<code>+91</code>/<code>0</code> prefix, 10 digits starting 6–9) and international E.164 numbers, bounded so they never match inside cards, Aadhaar, or order IDs.</p>
+          <div class="info-example">Partial: <code>+91-XXXXX-X1234</code></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- How It Works View -->
+    <section id="view-how-it-works" class="main-container view-section info-view" hidden>
+      <div class="info-header">
+        <h1>Zero-Egress Architecture</h1>
+        <p>Built with plain HTML, CSS, and vanilla JavaScript so every byte stays inside your browser session.</p>
+      </div>
+      <div class="rules-grid">
+        <article class="info-card">
+          <h3>1. Local File Ingestion</h3>
+          <p>TXT and CSV files are read directly from disk via the browser <code>FileReader</code> API. No upload endpoint, cloud bucket, or external script exists.</p>
+        </article>
+        <article class="info-card">
+          <h3>2. Checksum-Verified Detection</h3>
+          <p>Regex candidates pass algorithmic Luhn and Verhoeff checks plus boundary guards before overlap resolution removes duplicate or lower-priority spans.</p>
+        </article>
+        <article class="info-card">
+          <h3>3. Safe DOM Rendering</h3>
+          <p>Highlights and diff views are constructed via DOM text nodes and escaped elements — never raw <code>innerHTML</code> injection — preventing XSS on untrusted inputs.</p>
+        </article>
+        <article class="info-card">
+          <h3>4. Ephemeral Mapping &amp; Export</h3>
+          <p>Pseudonym tables live strictly in JavaScript memory. Audit JSON exports exclude raw PII completely; sanitized files export via local <code>Blob</code> URLs.</p>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <!-- Floating Tooltip for Highlighted Entities -->
+  <div id="entityTooltip" class="entity-tooltip" role="tooltip" hidden>
+    <div class="tooltip-head">
+      <span class="tooltip-type" id="tooltipType"></span>
+      <span class="tooltip-badge" id="tooltipValidation"></span>
+    </div>
+    <div class="tooltip-sub" id="tooltipReplacement"></div>
+  </div>
+
+  <!-- Privacy Confirmation Modal for Mapping Export -->
+  <div id="mappingWarningModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+    <div class="modal-card">
+      <div class="modal-icon-wrap">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3L2.5 19.5h19L12 3z" stroke="#F59E0B" stroke-width="1.75" stroke-linejoin="round" />
+          <path d="M12 9.5v4.5M12 16.8h.01" stroke="#F59E0B" stroke-width="2" stroke-linecap="round" />
+        </svg>
+      </div>
+      <h2 id="modalTitle">Export Sensitive Pseudonym Mapping?</h2>
+      <p class="modal-text">
+        This JSON file maps anonymized tokens (e.g. <code>EMAIL_01</code>) back to the <strong>raw unredacted PII values</strong>. Store it separately from your sanitized dataset in an encrypted, access-controlled vault.
+      </p>
+      <div class="modal-actions">
+        <button type="button" id="cancelMappingExportBtn" class="secondary-btn">Cancel</button>
+        <button type="button" id="confirmMappingExportBtn" class="warning-btn">Download Mapping JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Stack -->
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="detectors.js"></script>
+  <script src="redactor.js"></script>
+  <script src="samples.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
